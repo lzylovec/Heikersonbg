@@ -160,10 +160,6 @@ async function ensureMicMonitor() {
 // 开始连续转写
 async function startStreaming() {
     try {
-        if (isRecording) {
-            stableUpdateStatus('请先点击“结束录音”，再开始连续转写');
-            return;
-        }
         const res = await fetch('/start_streaming', { method: 'POST' });
         const data = await res.json();
         if (data.status !== 'streaming_started') {
@@ -172,7 +168,6 @@ async function startStreaming() {
         }
         stableUpdateStatus('📡 已启动连续转写...', true);
         isStreaming = true;
-        recordBtn.disabled = true;
         liveTranscript.textContent = '';
         stopStreamBtn.style.display = 'inline-block';
         liveIntent.textContent = '';
@@ -184,6 +179,7 @@ async function startStreaming() {
         eventSource.onmessage = (e) => {
             if (e.data && e.data.trim().length > 0) {
                 liveTranscript.textContent += e.data + '\n';
+                originalText.textContent = e.data;
             }
         };
         eventSource.onerror = () => {
@@ -251,7 +247,6 @@ async function stopStreaming() {
         }
         stopStreamBtn.style.display = 'none';
         isStreaming = false;
-        recordBtn.disabled = false;
         stableUpdateStatus('⏹️ 已停止连续转写');
     } catch (err) {
         console.error(err);
@@ -261,10 +256,6 @@ async function stopStreaming() {
 // 开始录音
 async function startRecording() {
     if (isRecording) return;
-    if (isStreaming) {
-        stableUpdateStatus('请先停止连续转写，再开始录音');
-        return;
-    }
     
     isRecording = true;
     isFinishingRecording = false;
@@ -298,7 +289,6 @@ async function startRecording() {
         
         stableUpdateStatus('🎤 正在录音，点击结束录音', true);
         stopRecordBtn.style.display = 'inline-block';
-        streamBtn.disabled = true;
         
     } catch (error) {
         console.error('录音失败:', error);
@@ -314,13 +304,17 @@ function stopRecording() {
     recordBtn.querySelector('.btn-text').textContent = '开始录音';
     loading.style.display = 'none';
     stopRecordBtn.style.display = 'none';
-    streamBtn.disabled = false;
 }
 
 async function finishRecording() {
     if (isFinishingRecording) return;
     isFinishingRecording = true;
+    // 先立即更新UI，避免用户感觉未结束
     stopRecordBtn.disabled = true;
+    stopRecordBtn.style.display = 'none';
+    isRecording = false;
+    recordBtn.classList.remove('recording');
+    recordBtn.querySelector('.btn-text').textContent = '开始录音';
     loading.style.display = 'block';
     stableUpdateStatus('⏹️ 已结束录音，正在识别...', true);
     try {
@@ -328,7 +322,6 @@ async function finishRecording() {
         const data = await response.json();
         if (data.error) {
             alert(data.error);
-            stopRecording();
             return;
         }
         if (data.status === 'recognized' && data.result) {
@@ -345,7 +338,6 @@ async function finishRecording() {
         console.error(e);
         stableUpdateStatus('❌ 识别失败');
     } finally {
-        stopRecording();
         isFinishingRecording = false;
         stopRecordBtn.disabled = false;
     }
