@@ -179,7 +179,6 @@ async function startStreaming() {
         eventSource.onmessage = (e) => {
             if (e.data && e.data.trim().length > 0) {
                 liveTranscript.textContent += e.data + '\n';
-                originalText.textContent = e.data;
             }
         };
         eventSource.onerror = () => {

@@ -7,6 +7,7 @@ import json
 import requests
 from openai import OpenAI
 import queue
+import time
 import threading
 from dashscope.audio.asr import Recognition
 from http import HTTPStatus
@@ -44,6 +45,7 @@ class SocialAnxietyTranslator:
         self._manual_rate = 16000
         self._manual_channels = 1
         self._manual_chunk = 1024
+        self._manual_thread = None
         available_mics = sr.Microphone.list_microphone_names()
         print(f"可用麦克风设备: {available_mics}")
         
@@ -124,7 +126,8 @@ class SocialAnxietyTranslator:
                         self._manual_frames.append(data)
                     except Exception:
                         break
-            threading.Thread(target=_capture, daemon=True).start()
+            self._manual_thread = threading.Thread(target=_capture, daemon=True)
+            self._manual_thread.start()
             return True
         except Exception as e:
             print(f"❌ 无法开始手动录音: {e}")
@@ -136,6 +139,13 @@ class SocialAnxietyTranslator:
             return None
         try:
             self._manual_recording = False
+            try:
+                if self._manual_thread and self._manual_thread.is_alive():
+                    self._manual_thread.join(timeout=1.0)
+            except Exception:
+                pass
+            self._manual_thread = None
+            time.sleep(0.05)
             try:
                 if self._manual_stream:
                     self._manual_stream.stop_stream()
