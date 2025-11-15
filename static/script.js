@@ -4,6 +4,7 @@ const clearBtn = document.getElementById('clearBtn');
 const streamBtn = document.getElementById('streamBtn');
 const stopStreamBtn = document.getElementById('stopStreamBtn');
 const resetSessionBtn = document.getElementById('resetSessionBtn');
+const stopRecordBtn = document.getElementById('stopRecordBtn');
 const statusText = document.getElementById('statusText');
 const statusIndicator = document.querySelector('.status-indicator');
 const originalText = document.getElementById('originalText');
@@ -12,12 +13,21 @@ const liveTranscript = document.getElementById('liveTranscript');
 const liveIntent = document.getElementById('liveIntent');
 const liveSummary = document.getElementById('liveSummary');
 const loading = document.getElementById('loading');
+const micLevelFill = document.getElementById('micLevelFill');
+const micStateEl = document.getElementById('micState');
+const micLevelText = document.getElementById('micLevelText');
 
 let isRecording = false;
 let checkResultInterval = null;
 let eventSource = null;
 let analysisSource = null;
 let summarySource = null;
+let micAudioContext = null;
+let micAnalyser = null;
+let micDataArray = null;
+let micStream = null;
+let micMonitorRAF = null;
+let micMonitorActive = false;
 
 // 更新状态显示
 function updateStatus(text, processing = false) {
@@ -78,6 +88,50 @@ function clearResults() {
         clearInterval(checkResultInterval);
         checkResultInterval = null;
     }
+}
+
+async function initMicMonitor() {
+    try {
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const source = micAudioContext.createMediaStreamSource(micStream);
+        micAnalyser = micAudioContext.createAnalyser();
+        micAnalyser.fftSize = 2048;
+        source.connect(micAnalyser);
+        micDataArray = new Uint8Array(micAnalyser.fftSize);
+        micMonitorActive = true;
+        micStateEl.textContent = '麦克风已激活';
+        updateMicLevel();
+    } catch (e) {
+        micStateEl.textContent = '无法访问麦克风';
+    }
+}
+
+function updateMicLevel() {
+    if (!micMonitorActive || !micAnalyser) return;
+    micAnalyser.getByteTimeDomainData(micDataArray);
+    let sum = 0;
+    for (let i = 0; i < micDataArray.length; i++) {
+        const v = micDataArray[i] - 128;
+        sum += v * v;
+    }
+    const rms = Math.sqrt(sum / micDataArray.length);
+    const level = Math.min(100, Math.max(0, Math.round((rms / 64) * 100)));
+    micLevelFill.style.width = level + '%';
+    micLevelText.textContent = level + '%';
+    if (level > 12) {
+        micStateEl.textContent = '检测到声音';
+    } else {
+        micStateEl.textContent = '静音中';
+    }
+    micMonitorRAF = requestAnimationFrame(updateMicLevel);
+}
+
+function stopMicMonitor() {
+    micMonitorActive = false;
+    if (micMonitorRAF) cancelAnimationFrame(micMonitorRAF);
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    if (micAudioContext) micAudioContext.close();
 }
 
 // 开始连续转写
@@ -188,8 +242,7 @@ async function startRecording() {
     translatedText.textContent = '等待AI分析...';
     
     try {
-        // 发送开始录音请求
-        const response = await fetch('/start_recording', {
+        const response = await fetch('/begin_manual_recording', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -204,11 +257,8 @@ async function startRecording() {
             return;
         }
         
-        stableUpdateStatus('🔄 正在处理录音，请稍候...', true);
-        loading.style.display = 'block';
-        
-        // 开始定期检查结果
-        checkResultInterval = setInterval(checkResult, 1000);
+        stableUpdateStatus('🎤 正在录音，点击结束录音', true);
+        stopRecordBtn.style.display = 'inline-block';
         
     } catch (error) {
         console.error('录音失败:', error);
@@ -223,6 +273,37 @@ function stopRecording() {
     recordBtn.classList.remove('recording');
     recordBtn.querySelector('.btn-text').textContent = '开始录音';
     loading.style.display = 'none';
+    stopRecordBtn.style.display = 'none';
+}
+
+async function finishRecording() {
+    if (!isRecording) return;
+    loading.style.display = 'block';
+    stableUpdateStatus('⏹️ 已结束录音，正在识别...', true);
+    try {
+        const response = await fetch('/end_manual_recording', { method: 'POST' });
+        const data = await response.json();
+        if (data.error) {
+            alert(data.error);
+            stopRecording();
+            return;
+        }
+        if (data.status === 'recognized' && data.result) {
+            originalText.textContent = data.result.original_text;
+            translatedText.textContent = '分析中...';
+            stableUpdateStatus('🧠 已识别，正在分析...', true);
+            if (checkResultInterval) { clearInterval(checkResultInterval); }
+            checkResultInterval = setInterval(checkResult, 1000);
+        } else if (data.status === 'completed' && data.result) {
+            displayResult(data.result);
+            stableUpdateStatus('✅ 分析完成！');
+        }
+    } catch (e) {
+        console.error(e);
+        stableUpdateStatus('❌ 识别失败');
+    } finally {
+        stopRecording();
+    }
 }
 
 // 检查结果
@@ -283,6 +364,7 @@ recordBtn.addEventListener('click', startRecording);
 clearBtn.addEventListener('click', clearResult);
 streamBtn.addEventListener('click', startStreaming);
 stopStreamBtn.addEventListener('click', stopStreaming);
+stopRecordBtn.addEventListener('click', finishRecording);
 resetSessionBtn.addEventListener('click', async () => {
     try {
         if (eventSource) { eventSource.close(); eventSource = null; }
@@ -331,6 +413,7 @@ window.addEventListener('load', async () => {
         setTimeout(() => {
             updateStatus('✅ 准备就绪！点击录音按钮或按空格键开始');
         }, 1000);
+        initMicMonitor();
     } else {
         updateStatus('❌ 需要麦克风权限才能使用录音功能');
     }

@@ -20,6 +20,10 @@
                     <span class="btn-icon">🎤</span>
                     <span class="btn-text">开始录音</span>
                 </button>
+                <button id="stopRecordBtn" class="clear-btn" style="display:none">
+                    <span class="btn-icon">⏹️</span>
+                    <span class="btn-text">结束录音</span>
+                </button>
                 <button id="clearBtn" class="clear-btn">
                     <span class="btn-icon">🗑️</span>
                     <span class="btn-text">清除</span>
@@ -44,6 +48,18 @@
             </div>
 
             <div class="results">
+                <div class="result-card">
+                    <h3>🎧 麦克风状态</h3>
+                    <div class="mic-status-wrap">
+                        <div class="mic-level-bar">
+                            <div id="micLevelFill" class="mic-level-fill"></div>
+                        </div>
+                        <div class="mic-status-text">
+                            <span id="micState">等待权限...</span>
+                            <span id="micLevelText">0%</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="result-card">
                     <h3>📝 原始文本</h3>
                     <div id="originalText" class="text-content">

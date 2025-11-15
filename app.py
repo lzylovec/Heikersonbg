@@ -87,6 +87,41 @@ def clear_result():
         pass
     return jsonify({'status': 'cleared'})
 
+@app.route('/begin_manual_recording', methods=['POST'])
+def begin_manual_recording():
+    global latest_result
+    ok = translator.start_manual_recording()
+    if ok:
+        latest_result = {'original_text': '正在录音...', 'translation': '等待结束', 'status_hint': '🎤 正在录音，点击结束'}
+        return jsonify({'status': 'recording_started'})
+    return jsonify({'error': '无法开始录音'}), 500
+
+@app.route('/end_manual_recording', methods=['POST'])
+def end_manual_recording():
+    global latest_result, is_processing
+    is_processing = True
+    try:
+        text = translator.stop_manual_recording()
+        if not text:
+            latest_result = {'original_text': '识别失败', 'translation': '请重试'}
+            is_processing = False
+            return jsonify({'status': 'completed', 'result': latest_result})
+        latest_result = {'original_text': text, 'translation': '分析中...', 'status_hint': '🧠 已识别，正在分析...'}
+        def _analyze_async(t):
+            global latest_result, is_processing
+            try:
+                translation = translator.translate_politeness(t)
+                latest_result = {'original_text': t, 'translation': translation}
+            except Exception as e:
+                latest_result = {'original_text': t, 'translation': f'分析失败: {str(e)}'}
+            finally:
+                is_processing = False
+        threading.Thread(target=_analyze_async, args=(text,), daemon=True).start()
+        return jsonify({'status': 'recognized', 'result': latest_result})
+    except Exception as e:
+        is_processing = False
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/start_streaming', methods=['POST'])
 def start_streaming():
     ok = translator.start_streaming()

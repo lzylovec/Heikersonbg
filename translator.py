@@ -10,6 +10,9 @@ import queue
 import threading
 from dashscope.audio.asr import Recognition
 from http import HTTPStatus
+import io
+import wave
+import pyaudio
 
 load_dotenv()
 api_key = os.getenv('DASHSCOPE_API_KEY')
@@ -34,6 +37,13 @@ class SocialAnxietyTranslator:
         self.analysis_log = []
         self._stop_listening = None
         self._streaming = False
+        self._pa = None
+        self._manual_stream = None
+        self._manual_frames = []
+        self._manual_recording = False
+        self._manual_rate = 16000
+        self._manual_channels = 1
+        self._manual_chunk = 1024
         available_mics = sr.Microphone.list_microphone_names()
         print(f"可用麦克风设备: {available_mics}")
         
@@ -89,6 +99,77 @@ class SocialAnxietyTranslator:
             except Exception:
                 pass
         self._streaming = False
+
+    def start_manual_recording(self):
+        if self._manual_recording:
+            return True
+        try:
+            self._pa = pyaudio.PyAudio()
+            _kwargs = {}
+            try:
+                _dev = getattr(self.microphone, 'device_index', None)
+                if _dev is not None:
+                    _kwargs['input_device_index'] = _dev
+            except Exception:
+                pass
+            self._manual_stream = self._pa.open(format=pyaudio.paInt16, channels=self._manual_channels, rate=self._manual_rate, input=True, frames_per_buffer=self._manual_chunk, **_kwargs)
+            self._manual_frames = []
+            self._manual_recording = True
+            def _capture():
+                while self._manual_recording:
+                    try:
+                        data = self._manual_stream.read(self._manual_chunk, exception_on_overflow=False)
+                        self._manual_frames.append(data)
+                    except Exception:
+                        break
+            threading.Thread(target=_capture, daemon=True).start()
+            return True
+        except Exception as e:
+            print(f"❌ 无法开始手动录音: {e}")
+            self._manual_recording = False
+            return False
+
+    def stop_manual_recording(self):
+        if not self._manual_recording and not self._manual_frames:
+            return None
+        try:
+            self._manual_recording = False
+            try:
+                if self._manual_stream:
+                    self._manual_stream.stop_stream()
+                    self._manual_stream.close()
+            except Exception:
+                pass
+            try:
+                if self._pa:
+                    self._pa.terminate()
+            except Exception:
+                pass
+            pcm = b''.join(self._manual_frames)
+            self._manual_frames = []
+            buf = io.BytesIO()
+            wf = wave.open(buf, 'wb')
+            wf.setnchannels(self._manual_channels)
+            wf.setsampwidth(2)
+            wf.setframerate(self._manual_rate)
+            wf.writeframes(pcm)
+            wf.close()
+            buf.seek(0)
+            with sr.AudioFile(buf) as source:
+                audio = self.recognizer.record(source)
+            try:
+                text = self.recognizer.recognize_google(audio, language='zh-CN')
+                return text
+            except Exception:
+                try:
+                    text = self.recognizer.recognize_sphinx(audio, language='zh-CN')
+                    return text
+                except Exception:
+                    pass
+            return None
+        except Exception as e:
+            print(f"❌ 手动录音处理失败: {e}")
+            return None
 
     def _reset_stream_state(self):
         try:
