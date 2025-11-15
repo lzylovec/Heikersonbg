@@ -28,6 +28,8 @@ let micDataArray = null;
 let micStream = null;
 let micMonitorRAF = null;
 let micMonitorActive = false;
+let isStreaming = false;
+let isFinishingRecording = false;
 
 // 更新状态显示
 function updateStatus(text, processing = false) {
@@ -92,7 +94,11 @@ function clearResults() {
 
 async function initMicMonitor() {
     try {
-        micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        try {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+        } catch (e) {
+            micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        }
         micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
         const source = micAudioContext.createMediaStreamSource(micStream);
         micAnalyser = micAudioContext.createAnalyser();
@@ -134,9 +140,30 @@ function stopMicMonitor() {
     if (micAudioContext) micAudioContext.close();
 }
 
+async function ensureMicMonitor() {
+    try {
+        if (micAudioContext && micAnalyser && micMonitorActive) {
+            try { await micAudioContext.resume(); } catch (_) {}
+            micStateEl.textContent = '麦克风已激活';
+            return true;
+        }
+        await initMicMonitor();
+        if (!micMonitorActive && !['localhost','127.0.0.1'].includes(location.hostname)) {
+            micStateEl.textContent = '需在本地或HTTPS启用';
+        }
+        return micMonitorActive;
+    } catch (_) {
+        return false;
+    }
+}
+
 // 开始连续转写
 async function startStreaming() {
     try {
+        if (isRecording) {
+            stableUpdateStatus('请先点击“结束录音”，再开始连续转写');
+            return;
+        }
         const res = await fetch('/start_streaming', { method: 'POST' });
         const data = await res.json();
         if (data.status !== 'streaming_started') {
@@ -144,6 +171,8 @@ async function startStreaming() {
             return;
         }
         stableUpdateStatus('📡 已启动连续转写...', true);
+        isStreaming = true;
+        recordBtn.disabled = true;
         liveTranscript.textContent = '';
         stopStreamBtn.style.display = 'inline-block';
         liveIntent.textContent = '';
@@ -155,11 +184,10 @@ async function startStreaming() {
         eventSource.onmessage = (e) => {
             if (e.data && e.data.trim().length > 0) {
                 liveTranscript.textContent += e.data + '\n';
-                originalText.textContent = e.data;
             }
         };
         eventSource.onerror = () => {
-            stableUpdateStatus('❌ 实时转写连接错误');
+            if (isStreaming) stableUpdateStatus('❌ 实时转写连接错误');
         };
 
         // 分析流
@@ -178,7 +206,7 @@ async function startStreaming() {
             }
         };
         analysisSource.onerror = () => {
-            stableUpdateStatus('❌ 实时分析连接错误');
+            if (isStreaming) stableUpdateStatus('❌ 实时分析连接错误');
         };
 
         // 摘要流
@@ -197,7 +225,7 @@ async function startStreaming() {
             }
         };
         summarySource.onerror = () => {
-            stableUpdateStatus('❌ 实时摘要连接错误');
+            if (isStreaming) stableUpdateStatus('❌ 实时摘要连接错误');
         };
     } catch (err) {
         console.error(err);
@@ -222,6 +250,8 @@ async function stopStreaming() {
             summarySource = null;
         }
         stopStreamBtn.style.display = 'none';
+        isStreaming = false;
+        recordBtn.disabled = false;
         stableUpdateStatus('⏹️ 已停止连续转写');
     } catch (err) {
         console.error(err);
@@ -231,8 +261,13 @@ async function stopStreaming() {
 // 开始录音
 async function startRecording() {
     if (isRecording) return;
+    if (isStreaming) {
+        stableUpdateStatus('请先停止连续转写，再开始录音');
+        return;
+    }
     
     isRecording = true;
+    isFinishingRecording = false;
     recordBtn.classList.add('recording');
     recordBtn.querySelector('.btn-text').textContent = '正在录音...';
     stableUpdateStatus('🎤 正在准备麦克风...', true);
@@ -242,6 +277,10 @@ async function startRecording() {
     translatedText.textContent = '等待AI分析...';
     
     try {
+        const monitorOk = await ensureMicMonitor();
+        if (!monitorOk) {
+            micStateEl.textContent = '浏览器未授权';
+        }
         const response = await fetch('/begin_manual_recording', {
             method: 'POST',
             headers: {
@@ -259,6 +298,7 @@ async function startRecording() {
         
         stableUpdateStatus('🎤 正在录音，点击结束录音', true);
         stopRecordBtn.style.display = 'inline-block';
+        streamBtn.disabled = true;
         
     } catch (error) {
         console.error('录音失败:', error);
@@ -274,10 +314,13 @@ function stopRecording() {
     recordBtn.querySelector('.btn-text').textContent = '开始录音';
     loading.style.display = 'none';
     stopRecordBtn.style.display = 'none';
+    streamBtn.disabled = false;
 }
 
 async function finishRecording() {
-    if (!isRecording) return;
+    if (isFinishingRecording) return;
+    isFinishingRecording = true;
+    stopRecordBtn.disabled = true;
     loading.style.display = 'block';
     stableUpdateStatus('⏹️ 已结束录音，正在识别...', true);
     try {
@@ -303,6 +346,8 @@ async function finishRecording() {
         stableUpdateStatus('❌ 识别失败');
     } finally {
         stopRecording();
+        isFinishingRecording = false;
+        stopRecordBtn.disabled = false;
     }
 }
 
@@ -378,6 +423,7 @@ resetSessionBtn.addEventListener('click', async () => {
     }
 });
 
+
 // 键盘快捷键
 document.addEventListener('keydown', (e) => {
     if (e.code === 'Space' && !isRecording) {
@@ -413,20 +459,12 @@ window.addEventListener('load', async () => {
         setTimeout(() => {
             updateStatus('✅ 准备就绪！点击录音按钮或按空格键开始');
         }, 1000);
-        initMicMonitor();
+        // 只有在本地安全源（localhost/127.0.0.1）或用户手势后监控更可靠
+        if (['localhost','127.0.0.1'].includes(location.hostname)) {
+            initMicMonitor();
+        }
     } else {
         updateStatus('❌ 需要麦克风权限才能使用录音功能');
+        micStateEl.textContent = '浏览器未授权';
     }
 });
-        if (analysisSource) {
-            analysisSource.close();
-        }
-        analysisSource = new EventSource('/stream_analysis');
-        analysisSource.onmessage = (e) => {
-            if (e.data && e.data.trim().length > 0) {
-                liveIntent.textContent += e.data + '\n';
-            }
-        };
-        analysisSource.onerror = () => {
-            updateStatus('❌ 实时分析连接错误');
-        };

@@ -70,6 +70,8 @@ class SocialAnxietyTranslator:
                 print(f"❌ 无法初始化麦克风: {e}")
                 raise Exception("无法找到可用的麦克风设备")
 
+    
+
     def start_streaming(self):
         if self._streaming:
             return True

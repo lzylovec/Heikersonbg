@@ -1,40 +1,72 @@
-# 社恐翻译器
+# 社恐翻译器（黑客松创意小作品）
 
-通过麦克风实现语音输入，将语音转为文本，然后调用大模型判断是否为"客套话"，输出真实意图的翻译器。
+一个面向社恐的创意辅助工具：通过麦克风采集语音，先展示识别到的原始文本，再用大模型分析“是否为客套话”、提炼真实意图并给出建议回应。适合黑客松快速演示与扩展。
 
-## 功能特点
+## 亮点功能
 
-- 🎤 语音识别：实时将语音转换为文本
-- 🧠 AI翻译：识别客套话并输出真实意图  
-- 💬 实时显示：在屏幕上显示翻译结果
-- 🚀 流式输出：支持实时流式响应
+- 🎧 麦克风状态可视化：前端实时电平条与状态文本，确认声音是否被采集
+- ⏺️ 手动开始/结束录音：点击开始录音采集音频，结束后先显示原文，再异步分析
+- 📡 连续转写模式：实时字幕（SSE）+ 逐句意图分析 + 摘要聚合
+- 🧠 大模型分析：优先 `qwen3-max`（OpenAI 兼容接口），失败回退 `dashscope.Generation`
 
-## 安装
+## 快速开始（macOS）
 
 ```bash
+# 1) 建议安装 PortAudio（用于 PyAudio）
+brew install portaudio
+
+# 2) 创建并激活虚拟环境
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3) 安装依赖
 pip install -r requirements.txt
-```
 
-## 配置
+# 4) 配置环境变量（.env 文件）
+# 在项目根目录新建 .env，并填入你的密钥（示例占位符）：
+# DASHSCOPE_API_KEY=YOUR_DASHSCOPE_API_KEY
 
-在项目根目录创建 `.env` 文件，添加你的API密钥：
-
-```
-DASHSCOPE_API_KEY=sk-b67aded7e87d4f1cb06b8db0b3853f35
-```
-
-## 使用
-
-```bash
+# 5) 启动服务
 python app.py
 ```
 
-然后在浏览器中访问 `http://localhost:5000`
+启动后访问 `http://127.0.0.1:8080/`（当前服务端口为 8080）。
 
-## 技术栈
+## 使用说明
 
-- Python
-- Flask (Web框架)
-- SpeechRecognition (语音识别)
-- DashScope (阿里云百炼大模型)
-- HTML/CSS/JavaScript (前端界面)
+- 开始/结束录音
+  - 点击“开始录音”后开始采集；点击“结束录音”后停止并识别
+  - 识别完成后，先在“原始文本”卡片显示文字，再进入“AI翻译”的异步分析阶段
+- 连续转写
+  - 点击“开始连续转写”可获得实时字幕、意图分析与摘要
+  - 点击“停止连续转写”结束该模式
+- 权限与设备
+  - 首次访问页面需允许浏览器麦克风权限
+  - 如后端采集失败，使用 `check_permissions.py` 与 `monitor_microphone.py` 排查
+
+## 常见问题
+
+- 端口说明：服务运行在 `8080`，如需修改，可在 `app.py` 调整 `port=`
+- 麦克风权限：macOS 请在“系统设置 → 隐私与安全 → 麦克风”中允许终端/浏览器
+- 依赖提示：PyAudio 依赖 PortAudio；未安装可能导致录音失败
+- 安全提示：请勿将真实密钥提交到仓库，`.env` 仅在本地使用
+
+## 项目结构（简要）
+
+- `app.py`：Flask Web 服务与接口（录音、结果轮询、SSE 流）
+- `translator.py`：语音识别与大模型分析管线（包含手动录音与连续转写）
+- `templates/index.html`：前端页面结构
+- `static/style.css`：页面样式
+- `static/script.js`：前端交互逻辑与麦克风电平可视化
+- `check_permissions.py` / `monitor_microphone.py`：麦克风权限与设备诊断工具
+
+## 黑客松价值
+
+- 创意点明确：把“客套话”解析为真实意图，帮助社恐快速理解社交语境
+- 演示友好：有可视化电平、原文→分析的明确反馈、实时转写与摘要
+- 易于扩展：可替换模型、接入 WebRTC 上传、增加多语言支持与对话上下文
+
+## 许可与鸣谢
+
+- 依赖：Flask、SpeechRecognition、PyAudio、DashScope、OpenAI 兼容接口
+- 数据与模型服务由阿里云百炼 DashScope 提供（请遵守各平台使用条款）

@@ -87,6 +87,7 @@ def clear_result():
         pass
     return jsonify({'status': 'cleared'})
 
+
 @app.route('/begin_manual_recording', methods=['POST'])
 def begin_manual_recording():
     global latest_result
