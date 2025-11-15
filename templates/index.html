@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>社恐翻译器</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎤</text></svg>">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎤 社恐翻译器</h1>
+            <p class="subtitle">让AI帮你理解客套话背后的真实含义</p>
+        </header>
+
+        <main>
+            <div class="control-panel">
+                <button id="recordBtn" class="record-btn">
+                    <span class="btn-icon">🎤</span>
+                    <span class="btn-text">开始录音</span>
+                </button>
+                <button id="clearBtn" class="clear-btn">
+                    <span class="btn-icon">🗑️</span>
+                    <span class="btn-text">清除</span>
+                </button>
+                <button id="streamBtn" class="record-btn">
+                    <span class="btn-icon">📡</span>
+                    <span class="btn-text">开始连续转写</span>
+                </button>
+                <button id="stopStreamBtn" class="clear-btn" style="display:none">
+                    <span class="btn-icon">⏹️</span>
+                    <span class="btn-text">停止连续转写</span>
+                </button>
+                <button id="resetSessionBtn" class="clear-btn">
+                    <span class="btn-icon">♻️</span>
+                    <span class="btn-text">重置会话</span>
+                </button>
+            </div>
+
+            <div id="status" class="status">
+                <div class="status-indicator"></div>
+                <span id="statusText">准备就绪，点击录音按钮开始</span>
+            </div>
+
+            <div class="results">
+                <div class="result-card">
+                    <h3>📝 原始文本</h3>
+                    <div id="originalText" class="text-content">
+                        等待录音...
+                    </div>
+                </div>
+
+                <div class="result-card">
+                    <h3>🧠 AI翻译</h3>
+                    <div id="translatedText" class="text-content">
+                        翻译结果将在这里显示
+                    </div>
+                </div>
+                <div class="result-card">
+                    <h3>🟢 实时字幕</h3>
+                    <div id="liveTranscript" class="text-content">
+                        连接后开始显示实时转写...
+                    </div>
+                </div>
+                <div class="result-card">
+                    <h3>📘 实时意图分析</h3>
+                    <div id="liveIntent" class="text-content">
+                        连接后显示每句的AI分析...
+                    </div>
+                </div>
+                <div class="result-card">
+                    <h3>🧾 实时摘要</h3>
+                    <div id="liveSummary" class="text-content">
+                        连接后显示多句聚合的实时摘要...
+                    </div>
+                </div>
+            </div>
+
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p>正在处理中...</p>
+            </div>
+        </main>
+
+        <footer>
+            <div class="tips">
+                <h4>💡 使用提示</h4>
+                <ul>
+                    <li>点击录音按钮开始说话</li>
+                    <li>说话时间请控制在10秒内</li>
+                    <li>AI会分析是否为客套话并给出真实意图</li>
+                    <li>支持中文语音识别</li>
+                </ul>
+            </div>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

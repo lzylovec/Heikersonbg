@@ -1,0 +1,5 @@
+dashscope
+speechrecognition
+pyaudio
+flask
+python-dotenv
